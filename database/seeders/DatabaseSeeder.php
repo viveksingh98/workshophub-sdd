@@ -10,6 +10,7 @@ use App\Models\Instructor;
 use App\Models\Setting;
 use App\Models\Student;
 use App\Models\StudentNote;
+use App\Models\User;
 use App\Models\WorkshopClass;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Str;
@@ -18,6 +19,15 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
+        User::updateOrCreate(
+            ['email' => 'hello@workshophub.local'],
+            [
+                'name' => 'Maya Rao',
+                'phone' => '9876543210',
+                'password' => 'workshop123',
+            ]
+        );
+
         foreach ([
             'studio_name' => 'WorkshopHub',
             'owner_name' => 'Maya Rao',
@@ -28,7 +38,7 @@ class DatabaseSeeder extends Seeder
             'hero_message' => 'Discover classes, book seats, and give the studio owner a practical dashboard for classes, bookings, students, content, themes, and settings.',
             'social_links' => '@workshophub',
             'email_subject' => 'Your WorkshopHub booking request',
-            'theme' => 'forest',
+            'theme' => 'studio',
         ] as $key => $value) {
             Setting::updateOrCreate(['key' => $key], ['value' => $value]);
         }
@@ -83,10 +93,11 @@ class DatabaseSeeder extends Seeder
         }
 
         foreach ([
-            ['title' => 'How to choose your first class', 'status' => 'Published', 'excerpt' => 'Start with the material you want to touch, then choose a pace that leaves room for questions.'],
-            ['title' => 'What to bring to a workshop', 'status' => 'Draft', 'excerpt' => 'Comfortable clothes, curiosity, and any accessibility notes the instructor should know.'],
+            ['title' => 'How to choose your first class', 'status' => 'Published', 'category' => 'Studio Life', 'excerpt' => 'Start with the material you want to touch, then choose a pace that leaves room for questions.', 'content' => '<p>Start with the material you want to touch — clay, paint, wood, or words. Then choose a pace that leaves room for questions.</p><h2>Beginner friendly</h2><p>Every class marked Beginner assumes zero experience. Tools and materials are provided.</p>'],
+            ['title' => 'What to bring to a workshop', 'status' => 'Published', 'category' => 'Techniques', 'excerpt' => 'Comfortable clothes, curiosity, and any accessibility notes the instructor should know.', 'content' => '<p>Comfortable clothes you do not mind getting messy, curiosity, and any accessibility notes the instructor should know about in advance.</p>'],
+            ['title' => 'New evening slots this season', 'status' => 'Draft', 'category' => 'Announcements', 'excerpt' => 'We are testing later evening classes for people who work full time.', 'content' => '<p>We are testing later evening classes for people who work full time — tell us which days work for you.</p>'],
         ] as $post) {
-            BlogPost::updateOrCreate(['slug' => Str::slug($post['title'])], $post);
+            BlogPost::updateOrCreate(['slug' => Str::slug($post['title'])], $post + ['published_at' => now()->toDateString()]);
         }
 
         foreach ([

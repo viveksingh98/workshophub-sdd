@@ -103,12 +103,37 @@ tr:last-child td { border-bottom: 0; }
 .theme-swatch { display: grid; grid-template-columns: 28px minmax(0, 1fr); align-items: center; gap: 8px; min-width: 150px; border: 1px solid var(--line); border-radius: var(--radius); background: #fff; padding: 8px 10px; font-weight: 800; }
 .theme-swatch.is-active { border-color: var(--green); background: #e8f2ef; color: var(--green); }
 .swatch { width: 28px; height: 28px; border-radius: 6px; border: 1px solid rgba(0,0,0,.14); }
-.swatch-forest { background: linear-gradient(135deg, #23745b, #0e7f91 48%, #b06c1c); }
-.swatch-harbor { background: linear-gradient(135deg, #236b73, #1f8a84 48%, #a77922); }
-.swatch-clay { background: linear-gradient(135deg, #4d7451, #287c85 48%, #b06124); }
-.swatch-ink { background: linear-gradient(135deg, #2e6a58, #236f90 48%, #a06b23); }
+.swatch-studio { background: linear-gradient(135deg, #23745b, #0e7f91 48%, #b06c1c); }
+.swatch-garden { background: linear-gradient(135deg, #3f7d3a, #2f8f6e 48%, #9c7a1f); }
+.swatch-chalk { background: linear-gradient(135deg, #4d7451, #287c85 48%, #b06124); }
+.swatch-night { background: linear-gradient(135deg, #12161f, #263e72 48%, #a06b23); }
+.swatch-paper { background: linear-gradient(135deg, #f7f3ea, #1f8a84 48%, #a77922); }
 .source-note { border-left: 4px solid var(--teal); background: #f4fbfc; padding: 14px 16px; }
-.is-hidden { display: none; }
+.is-hidden { display: none !important; }
+
+/* Walkthrough additions: auth shell, wizard, FAQ accordion, articles */
+.auth-body { display: grid; place-items: center; min-height: 100vh; background: var(--paper); }
+.auth-shell { width: min(560px, calc(100vw - 32px)); padding: 24px 0; }
+.auth-shell.wide { width: min(760px, calc(100vw - 32px)); }
+.auth-panel { display: grid; gap: 14px; padding: clamp(20px, 3vw, 32px); }
+.auth-panel h1 { margin: 0; font-size: clamp(28px, 4vw, 40px); }
+.check-row { display: flex; align-items: center; gap: 8px; }
+.check-row input { width: auto; min-height: auto; }
+.wizard-step { display: grid; gap: 12px; border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
+.wizard-step legend { padding: 0 6px; font-weight: 900; }
+.theme-swatch input[type="radio"] { width: auto; min-height: auto; }
+.faq-accordion { display: grid; gap: 10px; }
+.faq-accordion .faq-item summary { cursor: pointer; font-size: 17px; font-weight: 800; }
+.faq-accordion .faq-item p { margin: 10px 0 0; color: var(--muted); }
+.confirmation-card { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.article-card { display: flex; gap: 14px; align-items: start; }
+.article-thumb { width: 130px; height: 96px; object-fit: cover; border-radius: var(--radius); border: 1px solid var(--line); }
+.article-page { display: grid; gap: 12px; }
+.article-page h1 { margin: 0; font-size: clamp(30px, 5vw, 52px); line-height: 1.05; }
+.article-image { width: 100%; max-height: 420px; object-fit: cover; border-radius: var(--radius); border: 1px solid var(--line); }
+.rich-text { line-height: 1.7; }
+.brand-logo { width: 43px; height: 43px; object-fit: contain; border-radius: var(--radius); }
+.post-list.narrow { max-width: 960px; margin: 0 auto; width: 100%; }
 .toast-region { position: fixed; right: 18px; bottom: 18px; z-index: 40; display: grid; gap: 10px; width: min(360px, calc(100vw - 36px)); }
 .toast { border: 1px solid #b8d7c9; border-radius: var(--radius); background: #fff; box-shadow: var(--shadow); color: var(--green); padding: 12px 14px; font-weight: 900; }
 .footer { display: flex; justify-content: space-between; gap: 18px; padding: 22px clamp(16px, 3vw, 42px); border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }

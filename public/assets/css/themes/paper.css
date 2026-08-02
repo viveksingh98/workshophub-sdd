@@ -5,3 +5,9 @@
   --rose: #9f5369;
   --blue: #315f9f;
 }
+
+body {
+  --bg: #f7f3ea;
+  --panel: #fffdf7;
+  --line: #e4dcc9;
+}

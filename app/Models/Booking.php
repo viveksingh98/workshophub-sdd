@@ -12,11 +12,13 @@ class Booking extends Model
 
     protected $fillable = [
         'booking_code',
+        'mode',
         'workshop_class_id',
         'student_id',
         'visitor_name',
         'contact',
         'scheduled_date',
+        'starts_at',
         'seats',
         'status',
         'note',

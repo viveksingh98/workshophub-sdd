@@ -1,0 +1,24 @@
+:root {
+  --green: #37b08c;
+  --teal: #3cb3cf;
+  --amber: #d79b45;
+  --rose: #d0708c;
+  --blue: #6d92d6;
+  --ink: #e6ecf7;
+  --muted: #9aa7bd;
+  --line: #2a3347;
+  --paper: #12161f;
+  --panel: #1a2130;
+}
+
+.topbar { background: rgba(18, 22, 31, .92); border-bottom-color: var(--line); }
+.nav-tab, .segment, .button, .metric-line, .dashboard-tile, .day-column, .theme-swatch,
+input, select, textarea { background: var(--panel); color: var(--ink); border-color: var(--line); }
+.nav-tab.is-active, .segment.is-active, .theme-swatch.is-active { background: #21313f; }
+label { color: var(--muted); }
+.day-column h3, th { background: #202939; color: var(--muted); }
+.class-chip, .tag, .status-pill { background: #202939; }
+.flash, .source-note { background: #1d2c33; border-color: #2f4b52; }
+.toast { background: var(--panel); border-color: #2f4b52; }
+.map-preview { background: #1a2130; }
+.meter { background: #2a3347; }

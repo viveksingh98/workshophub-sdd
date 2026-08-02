@@ -10,7 +10,7 @@ class Student extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['name', 'contact'];
+    protected $fillable = ['name', 'contact', 'archived'];
 
     public function bookings(): HasMany
     {
@@ -20,5 +20,10 @@ class Student extends Model
     public function notes(): HasMany
     {
         return $this->hasMany(StudentNote::class);
+    }
+
+    public function records(): HasMany
+    {
+        return $this->hasMany(SessionRecord::class);
     }
 }

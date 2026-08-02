@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Requests\BookingRequest;
 use App\Http\Requests\ReservationRequest;
 use App\Models\BlogPost;
 use App\Models\Booking;
@@ -14,69 +13,113 @@ use App\Models\Setting;
 use App\Models\Student;
 use App\Models\StudentNote;
 use App\Models\WorkshopClass;
+use App\Services\AvailabilityService;
 use App\Services\ReservationService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Str;
+use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
 class WorkshopHubController extends Controller
 {
-    public function index(Request $request): View
+    public function __construct(private readonly AvailabilityService $availability)
     {
+    }
+
+    public function index(Request $request): View|RedirectResponse
+    {
+        if (\App\Models\User::query()->count() === 0) {
+            return redirect()->route('setup');
+        }
+
         return view('workshophub.index', $this->viewData($request));
     }
 
-    public function login(Request $request): RedirectResponse
+    /**
+     * Unit 44: the public booking flow — mode → open days → free slot,
+     * name + phone + note, a security question, and rate limiting.
+     */
+    public function storeBooking(Request $request): RedirectResponse
     {
         $validated = $request->validate([
-            'email' => ['required', 'email'],
-            'passcode' => ['required', 'string', 'min:6'],
+            'mode' => ['required', 'in:in_studio,online'],
+            'scheduled_date' => ['required', 'date', 'after_or_equal:today'],
+            'starts_at' => ['required', 'date_format:H:i'],
+            'visitor_name' => ['required', 'string', 'max:120'],
+            'phone' => ['required', 'string', 'max:32'],
+            'note' => ['nullable', 'string', 'max:500'],
+            'security_answer' => ['required', 'integer'],
         ]);
 
-        $request->session()->put('owner_unlocked', true);
-        $request->session()->put('owner_email', $validated['email']);
+        $captcha = $request->session()->get('booking_captcha');
+        if (! is_array($captcha) || (int) $validated['security_answer'] !== $captcha[0] + $captcha[1]) {
+            return back()->withErrors(['security_answer' => 'The security answer is wrong — try the little sum again.'])->withInput();
+        }
 
-        return redirect()->route('home', ['view' => 'admin'])->with('status', 'Owner workspace unlocked.');
-    }
+        // Unit 39: the phone is cleaned programmatically and used as the
+        // student identifier — spaces and separators never survive.
+        $phone = preg_replace('/\D+/', '', $validated['phone']);
+        if (strlen($phone) < 10) {
+            return back()->withErrors(['phone' => 'The phone number needs at least 10 digits.'])->withInput();
+        }
 
-    public function logout(Request $request): RedirectResponse
-    {
-        $request->session()->forget(['owner_unlocked', 'owner_email']);
+        $booking = DB::transaction(function () use ($validated, $phone) {
+            $slotFree = in_array(
+                $validated['starts_at'],
+                $this->availability->slotsFor($validated['mode'], $validated['scheduled_date']),
+                true
+            );
 
-        return redirect()->route('home', ['view' => 'admin'])->with('status', 'Owner workspace locked.');
-    }
+            if (! $slotFree) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'starts_at' => 'That slot was just taken or is not open — pick another one.',
+                ]);
+            }
 
-    public function storeBooking(BookingRequest $request): RedirectResponse
-    {
-        $validated = $request->validated();
-        $class = WorkshopClass::findOrFail($validated['workshop_class_id']);
+            $student = Student::firstOrCreate(['contact' => $phone], ['name' => $validated['visitor_name']]);
+            $student->update(['name' => $validated['visitor_name']]);
 
-        $student = Student::firstOrCreate(
-            ['contact' => $validated['contact']],
-            ['name' => $validated['visitor_name']]
-        );
-        $student->update(['name' => $validated['visitor_name']]);
-
-        $booking = Booking::create([
-            'booking_code' => $this->nextBookingCode(),
-            'workshop_class_id' => $class->id,
-            'student_id' => $student->id,
-            'visitor_name' => $validated['visitor_name'],
-            'contact' => $validated['contact'],
-            'scheduled_date' => $validated['scheduled_date'],
-            'seats' => $validated['seats'],
-            'status' => 'pending',
-            'note' => $validated['note'] ?? null,
-        ]);
+            return Booking::create([
+                'booking_code' => $this->nextBookingCode(),
+                'mode' => $validated['mode'],
+                'student_id' => $student->id,
+                'visitor_name' => $validated['visitor_name'],
+                'contact' => $phone,
+                'scheduled_date' => $validated['scheduled_date'],
+                'starts_at' => $validated['starts_at'],
+                'seats' => 1,
+                'status' => 'pending',
+                'note' => $validated['note'] ?? null,
+            ]);
+        });
 
         if (! empty($validated['note'])) {
-            StudentNote::create(['student_id' => $student->id, 'note' => $validated['note']]);
+            StudentNote::create(['student_id' => $booking->student_id, 'note' => $validated['note']]);
         }
+
+        DashboardController::notifyNewBooking($booking);
+        $request->session()->forget('booking_captcha');
 
         return redirect()
             ->route('home', ['view' => 'booking'])
-            ->with('confirmation', "{$booking->booking_code} created for {$class->title} on {$booking->scheduled_date->format('Y-m-d')}.");
+            ->with('confirmation', "{$booking->booking_code} confirmed for {$booking->scheduled_date->format('Y-m-d')} at {$booking->starts_at}.")
+            ->with('gcal_url', $this->googleCalendarUrl($booking));
+    }
+
+    public function bookingOptions(Request $request): JsonResponse
+    {
+        $mode = $request->query('mode', 'in_studio');
+        $date = $request->query('date');
+
+        if (! array_key_exists($mode, AvailabilityService::MODES)) {
+            return response()->json(['dates' => [], 'slots' => []]);
+        }
+
+        return response()->json([
+            'dates' => $this->availability->openDates($mode),
+            'slots' => $date ? $this->availability->slotsFor($mode, $date) : [],
+        ]);
     }
 
     public function storeReservation(ReservationRequest $request, ReservationService $reservations): RedirectResponse
@@ -98,130 +141,24 @@ class WorkshopHubController extends Controller
             ->with('status', "{$reservation->reservation_code} cancelled.");
     }
 
-    public function updateBookingStatus(Request $request, Booking $booking): RedirectResponse
+    public function themePreview(Request $request, string $theme): View
     {
-        $validated = $request->validate(['status' => ['required', 'in:pending,approved,waitlist,cancelled']]);
-        $booking->update(['status' => $validated['status']]);
+        abort_unless(in_array($theme, ['studio', 'garden', 'chalk', 'night', 'paper'], true), 404);
 
-        return redirect()->route('home', ['view' => 'admin'])->with('status', "{$booking->booking_code} marked {$validated['status']}.");
-    }
+        $data = $this->viewData($request);
+        $data['settings']['theme'] = $theme;
+        $data['previewingTheme'] = $theme;
 
-    public function storeClass(Request $request): RedirectResponse
-    {
-        $validated = $request->validate([
-            'title' => ['required', 'string', 'max:140'],
-            'category' => ['required', 'string', 'max:80'],
-            'instructor_name' => ['required', 'string', 'max:120'],
-            'weekday' => ['required', 'string', 'max:20'],
-            'time' => ['required', 'date_format:H:i'],
-            'duration_minutes' => ['required', 'integer', 'min:30', 'max:240'],
-            'capacity' => ['required', 'integer', 'min:1', 'max:40'],
-            'room' => ['required', 'string', 'max:120'],
-            'level' => ['required', 'string', 'max:80'],
-            'summary' => ['required', 'string', 'max:500'],
-        ]);
-
-        $instructor = Instructor::firstOrCreate(
-            ['name' => $validated['instructor_name']],
-            [
-                'bio' => 'Instructor profile created from the owner dashboard.',
-                'expertise' => $validated['category'],
-                'image_label' => Str::upper(Str::substr($validated['instructor_name'], 0, 2)),
-            ]
-        );
-
-        WorkshopClass::create([
-            'instructor_id' => $instructor->id,
-            'title' => $validated['title'],
-            'slug' => Str::slug($validated['title']).'-'.Str::lower(Str::random(4)),
-            'category' => $validated['category'],
-            'weekday' => $validated['weekday'],
-            'time' => $validated['time'],
-            'duration_minutes' => $validated['duration_minutes'],
-            'capacity' => $validated['capacity'],
-            'room' => $validated['room'],
-            'level' => $validated['level'],
-            'summary' => $validated['summary'],
-            'is_active' => true,
-        ]);
-
-        return redirect()->route('home', ['view' => 'admin'])->with('status', 'Class added.');
-    }
-
-    public function storeStudentNote(Request $request, Student $student): RedirectResponse
-    {
-        $validated = $request->validate(['note' => ['required', 'string', 'max:500']]);
-        $student->notes()->create($validated);
-
-        return redirect()->route('home', ['view' => 'admin'])->with('status', 'Student note added.');
-    }
-
-    public function storePost(Request $request): RedirectResponse
-    {
-        $validated = $request->validate([
-            'title' => ['required', 'string', 'max:140'],
-            'excerpt' => ['required', 'string', 'max:500'],
-            'status' => ['required', 'in:Draft,Published'],
-        ]);
-
-        BlogPost::create([
-            'title' => $validated['title'],
-            'slug' => Str::slug($validated['title']).'-'.Str::lower(Str::random(4)),
-            'excerpt' => $validated['excerpt'],
-            'status' => $validated['status'],
-        ]);
-
-        return redirect()->route('home', ['view' => 'admin'])->with('status', 'Blog post saved.');
-    }
-
-    public function updateSettings(Request $request): RedirectResponse
-    {
-        $validated = $request->validate([
-            'studio_name' => ['required', 'string', 'max:100'],
-            'owner_name' => ['required', 'string', 'max:100'],
-            'logo_text' => ['required', 'string', 'max:3'],
-            'contact_email' => ['required', 'email', 'max:160'],
-            'tagline' => ['required', 'string', 'max:140'],
-            'address' => ['required', 'string', 'max:180'],
-            'hero_message' => ['required', 'string', 'max:500'],
-            'social_links' => ['required', 'string', 'max:160'],
-            'email_subject' => ['required', 'string', 'max:160'],
-        ]);
-
-        foreach ($validated as $key => $value) {
-            Setting::updateOrCreate(['key' => $key], ['value' => $value]);
-        }
-
-        return redirect()->route('home', ['view' => 'admin'])->with('status', 'Settings saved.');
-    }
-
-    public function updateTheme(Request $request): RedirectResponse
-    {
-        $validated = $request->validate(['theme' => ['required', 'in:forest,harbor,clay,ink']]);
-        Setting::updateOrCreate(['key' => 'theme'], ['value' => $validated['theme']]);
-
-        return redirect()->route('home', ['view' => 'admin'])->with('status', 'Theme changed.');
-    }
-
-    public function waiver(): \Symfony\Component\HttpFoundation\StreamedResponse
-    {
-        return response()->streamDownload(function (): void {
-            echo implode(PHP_EOL, [
-                'WorkshopHub Waiver Note',
-                '',
-                'Participants acknowledge studio safety rules before tool-based classes.',
-                'Emergency contact and accessibility notes should be captured before attendance.',
-                'This downloadable document maps to Unit 37 support-module requirements.',
-            ]);
-        }, 'workshophub-waiver-note.txt');
+        return view('workshophub.index', $data);
     }
 
     private function viewData(Request $request): array
     {
         $settings = Setting::map();
+        $view = $request->query('view', 'public');
+
         $classes = WorkshopClass::query()->with(['instructor', 'bookings'])->where('is_active', true)->orderBy('weekday')->orderBy('time')->get();
-        $bookings = Booking::query()->with(['workshopClass.instructor', 'student'])->latest()->get();
-        $students = Student::query()->with(['bookings.workshopClass', 'notes'])->latest()->get();
+        $publishedPosts = BlogPost::query()->where('status', 'Published')->orderByDesc('published_at')->get();
 
         $reservationQuery = EquipmentReservation::query()->with('equipment')->orderBy('reserved_date')->orderBy('starts_at');
         if ($request->filled('equipment_filter')) {
@@ -231,15 +168,19 @@ class WorkshopHubController extends Controller
             $reservationQuery->whereDate('reserved_date', $request->query('date_filter'));
         }
 
+        if ($view === 'booking') {
+            $request->session()->put('booking_captcha', [random_int(2, 9), random_int(2, 9)]);
+        }
+
         return [
-            'view' => $request->query('view', 'public'),
+            'view' => $view,
             'settings' => $settings,
             'classes' => $classes,
             'categories' => $classes->pluck('category')->unique()->values(),
             'instructors' => Instructor::query()->with('classes')->orderBy('name')->get(),
-            'bookings' => $bookings,
-            'students' => $students,
-            'posts' => BlogPost::query()->latest()->get(),
+            'posts' => $publishedPosts,
+            'blogCategories' => $publishedPosts->pluck('category')->unique()->values(),
+            'activePost' => $request->query('post') ? $publishedPosts->firstWhere('slug', $request->query('post')) : null,
             'faqs' => Faq::query()->orderBy('sort_order')->get(),
             'equipment' => Equipment::query()->where('is_active', true)->orderBy('name')->get(),
             'reservations' => $reservationQuery->get(),
@@ -247,17 +188,37 @@ class WorkshopHubController extends Controller
                 'equipment' => $request->query('equipment_filter', ''),
                 'date' => $request->query('date_filter', ''),
             ],
+            'modes' => AvailabilityService::MODES,
+            'openDates' => [
+                'in_studio' => $this->availability->openDates('in_studio'),
+                'online' => $this->availability->openDates('online'),
+            ],
+            'captcha' => $request->session()->get('booking_captcha'),
             'metrics' => [
                 'classes' => $classes->count(),
-                'openSeats' => $classes->sum(fn (WorkshopClass $class) => $class->seatsLeft()),
-                'bookings' => $bookings->where('status', '!=', 'cancelled')->count(),
-                'students' => $students->count(),
-                'pending' => $bookings->where('status', 'pending')->count(),
-                'approvedSeats' => $bookings->where('status', 'approved')->sum('seats'),
+                'instructors' => Instructor::query()->count(),
+                'posts' => $publishedPosts->count(),
+                'faqs' => Faq::query()->count(),
             ],
-            'ownerUnlocked' => $request->session()->get('owner_unlocked', false),
-            'themes' => ['forest' => 'Forest', 'harbor' => 'Harbor', 'clay' => 'Clay', 'ink' => 'Ink'],
         ];
+    }
+
+    private function googleCalendarUrl(Booking $booking): string
+    {
+        $settings = Setting::map();
+        $duration = (int) (json_decode($settings['availability'] ?? '', true)[$booking->mode === 'online' ? 'online_duration' : 'class_duration'] ?? 60);
+
+        $start = \Carbon\Carbon::parse($booking->scheduled_date->toDateString().' '.$booking->starts_at);
+        $end = $start->copy()->addMinutes($duration);
+        $format = 'Ymd\THis';
+
+        return 'https://calendar.google.com/calendar/render?'.http_build_query([
+            'action' => 'TEMPLATE',
+            'text' => $settings['studio_name'].' — '.AvailabilityService::MODES[$booking->mode].' class',
+            'dates' => $start->format($format).'/'.$end->format($format),
+            'details' => 'Booking '.$booking->booking_code,
+            'location' => $booking->mode === 'online' ? 'Online' : $settings['address'],
+        ]);
     }
 
     private function nextBookingCode(): string
