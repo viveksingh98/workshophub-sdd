@@ -1,0 +1,22 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: workshophub_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: workshophub
+      MYSQL_USER: workshophub
+      MYSQL_PASSWORD: workshophub
+      MYSQL_ROOT_PASSWORD: rootsecret
+    ports:
+      - "3307:3306"
+    volumes:
+      - workshophub_mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+
+volumes:
+  workshophub_mysql:
