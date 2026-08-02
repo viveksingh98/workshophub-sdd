@@ -9,9 +9,44 @@ The working companion app for the **SDD Masterclass** and the **Spec Kit Hands-O
 - Native JavaScript — no frontend frameworks, no CDN dependencies
 - Five theme CSS files in `public/assets/css/themes/`: **Studio · Garden · Chalk · Night · Paper**
 
-## Quickstart (SQLite — no Docker needed)
+## Setup — step by step (Windows, macOS, Linux)
 
-Requires PHP 8.3+ and Composer.
+You need **PHP 8.3+** (with the SQLite extension) and **Composer**. No Docker, no Node needed.
+
+### 1 · Get the code
+
+```bash
+git clone https://github.com/viveksingh98/workshophub-sdd.git
+cd workshophub-sdd
+```
+
+(or use the green **Code → Download ZIP** button on GitHub and unzip it)
+
+### 2 · Install PHP + Composer
+
+**Windows**
+
+1. Install [Scoop](https://scoop.sh) (open PowerShell and run the command from their homepage)
+2. `scoop install php composer`
+3. Enable SQLite: open the `php.ini` in your PHP folder and make sure these lines are uncommented (no leading `;`): `extension=pdo_sqlite` and `extension=sqlite3`
+
+**macOS**
+
+1. Install [Homebrew](https://brew.sh) if you don't have it
+2. `brew install php composer` (SQLite is already included)
+
+**Linux (Ubuntu/Debian)**
+
+```bash
+sudo apt update
+sudo apt install php php-cli php-sqlite3 php-xml php-mbstring php-curl composer unzip
+```
+
+Check both work: `php -v` and `composer -V`.
+
+### 3 · Install and run the app
+
+Same commands on every OS (Windows users: run them in PowerShell; use `copy` instead of `cp`):
 
 ```bash
 composer install
@@ -21,7 +56,7 @@ php artisan migrate:fresh --seed
 php artisan serve
 ```
 
-Open http://127.0.0.1:8000.
+Open http://127.0.0.1:8000 — done. The seeded demo data makes every screen presentable on first boot.
 
 **Demo owner login** (at `/studio-access` — all three fields must match):
 
